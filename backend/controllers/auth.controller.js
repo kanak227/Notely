@@ -1,14 +1,45 @@
 import {User} from '../models/user.model.js'
 import bcryptjs from 'bcryptjs'
+import crypto from 'crypto';
 import { generateTokenAndSaveCookie } from '../utils/generateTokenAndSaveCookie.js';
 import { sendVerificationEmail } from '../mailtrap/emails.js';
+import { PASSWORD_RESET_REQUEST_TEMPLATE } from '../mailtrap/emailTemplates.js';
 
 export const login = async(req , res) =>{
-    res.send('this is login');
+    const {email , password} = req.body;
+    try{
+        const user = await User.findOne({email});
+        if(!user){
+            res.status(400).json({success:false , message: "user not there" });
+        }
+
+        const isValid = await bcryptjs.compare(password , user.password);
+        if(!isValid) {return res.json(400).json({message:"incorrect credentials" , success: false});}
+
+        generateTokenAndSaveCookie(res , user._id);
+        user.lastLogin = new Date();
+        await user.save();
+
+        res.status(200).json({
+            message: "logged in",
+            success: true,
+            user:{
+                ...user._doc,
+                password: undefined
+            }
+        })
+
+
+    }
+
+    catch(error) {
+        throw new Error(error);
+    }
 }
 
 export const logout = async(req , res) =>{
-    res.send('this is logout');
+    res.clearCookie("token");
+    res.status(200).json({message: "Logged out successfully" , success: true});
 }
 
 export const sign_up = async(req , res) =>{
@@ -51,5 +82,26 @@ export const sign_up = async(req , res) =>{
     }
     catch(error){
         res.status(400).json({success: false , message: error.message});
+    }
+}
+
+
+export const checkAuth = async (req, res) => {
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) {
+            return res.status(400).json({ message: "Invalid entry" });
+        }
+        // Respond with user info (excluding password)
+        res.status(200).json({
+            success: true,
+            user: {
+                ...user._doc,
+                password: undefined
+            }
+        });
+    } catch (error) {
+        console.log("error in check-auth");
+        res.status(500).json({ message: error.message });
     }
 }
